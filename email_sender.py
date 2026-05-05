@@ -56,7 +56,7 @@ def send_result_email(exp_code, excel_path):
     subject = f"问卷结果 - 实验码 {exp_code}"
     content = "见附件"
     return sender.send_email(
-        "1983128249@qq.com",
+        "2443874694@qq.com",
         subject,
         content,
         [excel_path]
