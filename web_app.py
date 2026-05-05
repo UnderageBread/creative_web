@@ -38,8 +38,15 @@ if "task_index" not in st.session_state:
     st.session_state.task_index = 0
 
 IMAGE_DIR = "images"
-
 RATING_OPTIONS = ["0", "1", "2", "3", "4", "5", "6", "7"]
+TASK_DURATION = 180
+BREAK_DURATION = 30
+
+def js_auto_refresh(seconds):
+    st.components.v1.html(
+        f"<script>setTimeout(function(){{window.parent.location.reload();}}, {seconds * 1000});</script>",
+        height=0
+    )
 
 def save_to_excel(data):
     exp_code = data.get("exp_code", "unknown")
@@ -89,23 +96,19 @@ if st.session_state.stage == "q1":
 elif st.session_state.stage == "q2_q3":
     st.title("Creativity Research Study")
     st.markdown("---")
-
     q2_val = st.radio(
         label="Q2: On a scale of 0–7, how would you rate your ability to cope with pressure? (0 = very low, 7 = very high)",
         options=RATING_OPTIONS,
         index=None,
         key="q2_radio"
     )
-
     st.markdown("---")
-
     q3_val = st.radio(
         label="Q3: On a scale of 0–7, how stressed do you feel right now? (0 = not at all, 7 = extremely stressed)",
         options=RATING_OPTIONS,
         index=None,
         key="q3_radio"
     )
-
     st.markdown("")
     if st.button("Continue →", type="primary"):
         if q2_val is None or q3_val is None:
@@ -121,7 +124,6 @@ elif st.session_state.stage == "task_intro":
     group = st.session_state.data["group"]
     st.title("Main Task Instructions")
     st.markdown("---")
-
     if group == "control":
         st.markdown("""
 You will be participating in a **job recruitment exercise**.
@@ -152,7 +154,6 @@ Give your best effort to outperform the other candidates.
 
 You may respond in your native language.
         """)
-
     st.markdown("---")
     st.markdown("There are **3 objects** in total. After each 3-minute task, you will have a **30-second break**.")
     st.markdown("")
@@ -163,15 +164,14 @@ You may respond in your native language.
 
 # ── Stage 4: Tasks ────────────────────────────────────────────────────────────
 elif st.session_state.stage == "task":
-    group = st.session_state.data["group"]
     idx = st.session_state.task_index
+    group = st.session_state.data["group"]
 
     tasks = [
         {"name": "Brick",     "control_img": "Control-bricks.jpg",     "exp_img": "Experimental-bricks.jpg",     "key": "task1"},
         {"name": "Paperclip", "control_img": "Control-paperclips.jpg", "exp_img": "Experimental-paperclips.jpg", "key": "task2"},
         {"name": "Newspaper", "control_img": "Control-newspapers.jpg", "exp_img": "Experimental-newspapers.jpg", "key": "task3"},
     ]
-
     task = tasks[idx]
     img_file = task["control_img"] if group == "control" else task["exp_img"]
     img_path = os.path.join(IMAGE_DIR, img_file)
@@ -181,25 +181,26 @@ elif st.session_state.stage == "task":
         st.session_state[task_key] = time.time()
 
     elapsed = time.time() - st.session_state[task_key]
-    TASK_DURATION = 180
 
     if elapsed >= TASK_DURATION:
         st.session_state.data[task["key"]] = st.session_state.get(f"response_{idx}", "")
         st.session_state.stage = "break" if idx < 2 else "final_q"
         st.rerun()
-        st.stop()
+    else:
+        remaining = TASK_DURATION - elapsed
+        mins, secs = divmod(int(remaining), 60)
 
-    st.title(f"Task {idx + 1} of 3: {task['name']}")
-    st.markdown("---")
+        st.title(f"Task {idx + 1} of 3: {task['name']}")
+        st.markdown("---")
 
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        if os.path.exists(img_path):
-            st.image(img_path, caption=task["name"], width=260)
-        else:
-            st.warning(f"Image not found: {img_path}")
-    with col2:
-        st.markdown(f"""
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if os.path.exists(img_path):
+                st.image(img_path, caption=task["name"], width=260)
+            else:
+                st.warning(f"Image not found: {img_path}")
+        with col2:
+            st.markdown(f"""
 **Object: {task['name']}**
 
 List as many **unusual, novel, and reasonable non-conventional uses** as you can think of.
@@ -207,33 +208,28 @@ List as many **unusual, novel, and reasonable non-conventional uses** as you can
 - One use per line
 - Exclude the original/intended use
 - You have **3 minutes**
-        """)
+            """)
 
-    st.text_area(
-        label=f"Your responses for {task['name']} (one use per line):",
-        height=220,
-        key=f"response_{idx}"
-    )
+        st.text_area(
+            label=f"Your responses for {task['name']} (one use per line):",
+            height=220,
+            key=f"response_{idx}"
+        )
 
-    remaining = int(TASK_DURATION - elapsed)
-    mins, secs = divmod(remaining, 60)
-    st.markdown(f"⏱ Time remaining: **{mins}:{secs:02d}**")
-    st.markdown("")
-    if st.button("Submit & Continue", type="primary"):
-        st.session_state.data[task["key"]] = st.session_state.get(f"response_{idx}", "")
-        st.session_state.stage = "break" if idx < 2 else "final_q"
-        st.rerun()
-        st.stop()
-    time.sleep(1)
-    st.rerun()
-    st.stop()
+        st.markdown(f"⏱ Time remaining: **{mins}:{secs:02d}**")
+        st.markdown("")
+        if st.button("Submit & Continue", type="primary"):
+            st.session_state.data[task["key"]] = st.session_state.get(f"response_{idx}", "")
+            st.session_state.stage = "break" if idx < 2 else "final_q"
+            st.rerun()
+
+        js_auto_refresh(max(1, int(remaining) % 10 or 10))
 
 # ── Stage 5: Break ────────────────────────────────────────────────────────────
 elif st.session_state.stage == "break":
     idx = st.session_state.task_index
     task_names = ["Brick", "Paperclip", "Newspaper"]
 
-    BREAK_DURATION = 30
     if "break_start" not in st.session_state or st.session_state.get("break_idx") != idx:
         st.session_state.break_start = time.time()
         st.session_state.break_idx = idx
@@ -244,26 +240,24 @@ elif st.session_state.stage == "break":
         st.session_state.task_index += 1
         st.session_state.stage = "task"
         st.rerun()
-        st.stop()
+    else:
+        remaining = BREAK_DURATION - elapsed
 
-    remaining = int(BREAK_DURATION - elapsed)
-    st.title("Rest Break")
-    st.markdown("---")
-    st.markdown(f"### Task {idx + 1} complete! Great work. 🎉")
-    st.markdown("Please take about **30 seconds** to rest and relax before the next task.")
-    st.markdown("")
-    if idx + 1 < len(task_names):
-        st.markdown(f"**Next object: {task_names[idx + 1]}**")
-    st.markdown("")
-    st.markdown(f"⏱ Next task starts in **{remaining}** seconds...")
-    if st.button(f"I'm Ready — Start Task {idx + 2}", type="primary"):
-        st.session_state.task_index += 1
-        st.session_state.stage = "task"
-        st.rerun()
-        st.stop()
-    time.sleep(1)
-    st.rerun()
-    st.stop()
+        st.title("Rest Break")
+        st.markdown("---")
+        st.markdown(f"### Task {idx + 1} complete! Great work. 🎉")
+        st.markdown("Please take about **30 seconds** to rest and relax before the next task.")
+        st.markdown("")
+        if idx + 1 < len(task_names):
+            st.markdown(f"**Next object: {task_names[idx + 1]}**")
+        st.markdown("")
+        st.markdown(f"⏱ Next task starts in **{int(remaining)}** seconds...")
+        if st.button(f"I'm Ready — Start Task {idx + 2}", type="primary"):
+            st.session_state.task_index += 1
+            st.session_state.stage = "task"
+            st.rerun()
+
+        js_auto_refresh(max(1, int(remaining)))
 
 # ── Stage 6: Final Question ───────────────────────────────────────────────────
 elif st.session_state.stage == "final_q":
@@ -271,14 +265,12 @@ elif st.session_state.stage == "final_q":
     st.markdown("---")
     st.markdown("You have completed all three tasks. Thank you for your effort!")
     st.markdown("")
-
     q5_val = st.radio(
         label="Q5: On a scale of 0–7, how stressed did you feel during the tasks above? (0 = not at all, 7 = extremely stressed)",
         options=RATING_OPTIONS,
         index=None,
         key="q5_radio"
     )
-
     st.markdown("")
     if st.button("Submit All Responses", type="primary"):
         if q5_val is None:
