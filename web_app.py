@@ -27,6 +27,7 @@ p, label, div, span, li { color: #2c3e50 !important; }
     font-weight: 600;
 }
 .stButton > button:hover { background-color: #7fb3d9; }
+#auto-btn { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -42,11 +43,43 @@ RATING_OPTIONS = ["0", "1", "2", "3", "4", "5", "6", "7"]
 TASK_DURATION = 180
 BREAK_DURATION = 30
 
-def js_auto_refresh(seconds):
-    st.components.v1.html(
-        f"<script>setTimeout(function(){{window.parent.location.reload();}}, {seconds * 1000});</script>",
-        height=0
-    )
+def countdown_timer(remaining_seconds, label, auto_trigger_key):
+    """Show JS countdown. When it hits 0, click the hidden Streamlit button."""
+    st.markdown(f'<div id="timer-display">⏱ {label}: <strong id="timer-val"></strong></div>', unsafe_allow_html=True)
+    # Hidden button that JS will click when time is up
+    clicked = st.button("__auto__", key=auto_trigger_key)
+    st.markdown("""
+<style>
+button[kind="secondary"][data-testid="baseButton-secondary"] { display: none !important; }
+</style>
+""", unsafe_allow_html=True)
+    st.components.v1.html(f"""
+<script>
+var remaining = {int(remaining_seconds)};
+function fmt(s) {{
+    var m = Math.floor(s / 60);
+    var sec = s % 60;
+    return m + ":" + (sec < 10 ? "0" : "") + sec;
+}}
+function tick() {{
+    var el = window.parent.document.getElementById("timer-val");
+    if (el) el.innerText = fmt(remaining);
+    if (remaining <= 0) {{
+        var buttons = window.parent.document.querySelectorAll("button");
+        for (var i = 0; i < buttons.length; i++) {{
+            if (buttons[i].innerText.trim() === "__auto__") {{
+                buttons[i].click();
+                return;
+            }}
+        }}
+    }}
+    remaining--;
+    setTimeout(tick, 1000);
+}}
+tick();
+</script>
+""", height=0)
+    return clicked
 
 def save_to_excel(data):
     exp_code = data.get("exp_code", "unknown")
@@ -181,26 +214,19 @@ elif st.session_state.stage == "task":
         st.session_state[task_key] = time.time()
 
     elapsed = time.time() - st.session_state[task_key]
+    remaining = max(0, TASK_DURATION - elapsed)
 
-    if elapsed >= TASK_DURATION:
-        st.session_state.data[task["key"]] = st.session_state.get(f"response_{idx}", "")
-        st.session_state.stage = "break" if idx < 2 else "final_q"
-        st.rerun()
-    else:
-        remaining = TASK_DURATION - elapsed
-        mins, secs = divmod(int(remaining), 60)
+    st.title(f"Task {idx + 1} of 3: {task['name']}")
+    st.markdown("---")
 
-        st.title(f"Task {idx + 1} of 3: {task['name']}")
-        st.markdown("---")
-
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            if os.path.exists(img_path):
-                st.image(img_path, caption=task["name"], width=260)
-            else:
-                st.warning(f"Image not found: {img_path}")
-        with col2:
-            st.markdown(f"""
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if os.path.exists(img_path):
+            st.image(img_path, caption=task["name"], width=260)
+        else:
+            st.warning(f"Image not found: {img_path}")
+    with col2:
+        st.markdown(f"""
 **Object: {task['name']}**
 
 List as many **unusual, novel, and reasonable non-conventional uses** as you can think of.
@@ -208,22 +234,23 @@ List as many **unusual, novel, and reasonable non-conventional uses** as you can
 - One use per line
 - Exclude the original/intended use
 - You have **3 minutes**
-            """)
+        """)
 
-        st.text_area(
-            label=f"Your responses for {task['name']} (one use per line):",
-            height=220,
-            key=f"response_{idx}"
-        )
+    st.text_area(
+        label=f"Your responses for {task['name']} (one use per line):",
+        height=220,
+        key=f"response_{idx}"
+    )
 
-        st.markdown(f"⏱ Time remaining: **{mins}:{secs:02d}**")
-        st.markdown("")
-        if st.button("Submit & Continue", type="primary"):
-            st.session_state.data[task["key"]] = st.session_state.get(f"response_{idx}", "")
-            st.session_state.stage = "break" if idx < 2 else "final_q"
-            st.rerun()
+    auto_clicked = countdown_timer(remaining, "Time remaining", f"auto_task_{idx}")
 
-        js_auto_refresh(max(1, int(remaining) % 10 or 10))
+    st.markdown("")
+    manual_clicked = st.button("Submit & Continue", type="primary", key=f"manual_task_{idx}")
+
+    if auto_clicked or manual_clicked:
+        st.session_state.data[task["key"]] = st.session_state.get(f"response_{idx}", "")
+        st.session_state.stage = "break" if idx < 2 else "final_q"
+        st.rerun()
 
 # ── Stage 5: Break ────────────────────────────────────────────────────────────
 elif st.session_state.stage == "break":
@@ -235,29 +262,26 @@ elif st.session_state.stage == "break":
         st.session_state.break_idx = idx
 
     elapsed = time.time() - st.session_state.break_start
+    remaining = max(0, BREAK_DURATION - elapsed)
 
-    if elapsed >= BREAK_DURATION:
+    st.title("Rest Break")
+    st.markdown("---")
+    st.markdown(f"### Task {idx + 1} complete! Great work. 🎉")
+    st.markdown("Please take about **30 seconds** to rest and relax before the next task.")
+    st.markdown("")
+    if idx + 1 < len(task_names):
+        st.markdown(f"**Next object: {task_names[idx + 1]}**")
+    st.markdown("")
+
+    auto_clicked = countdown_timer(remaining, "Next task starts in", f"auto_break_{idx}")
+
+    st.markdown("")
+    manual_clicked = st.button(f"I'm Ready — Start Task {idx + 2}", type="primary", key=f"manual_break_{idx}")
+
+    if auto_clicked or manual_clicked:
         st.session_state.task_index += 1
         st.session_state.stage = "task"
         st.rerun()
-    else:
-        remaining = BREAK_DURATION - elapsed
-
-        st.title("Rest Break")
-        st.markdown("---")
-        st.markdown(f"### Task {idx + 1} complete! Great work. 🎉")
-        st.markdown("Please take about **30 seconds** to rest and relax before the next task.")
-        st.markdown("")
-        if idx + 1 < len(task_names):
-            st.markdown(f"**Next object: {task_names[idx + 1]}**")
-        st.markdown("")
-        st.markdown(f"⏱ Next task starts in **{int(remaining)}** seconds...")
-        if st.button(f"I'm Ready — Start Task {idx + 2}", type="primary"):
-            st.session_state.task_index += 1
-            st.session_state.stage = "task"
-            st.rerun()
-
-        js_auto_refresh(max(1, int(remaining)))
 
 # ── Stage 6: Final Question ───────────────────────────────────────────────────
 elif st.session_state.stage == "final_q":
