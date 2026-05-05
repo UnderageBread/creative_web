@@ -43,19 +43,13 @@ RATING_OPTIONS = ["0", "1", "2", "3", "4", "5", "6", "7"]
 TASK_DURATION = 180
 BREAK_DURATION = 30
 
-def countdown_timer(remaining_seconds, label, auto_trigger_key):
-    """Show JS countdown. When it hits 0, click the hidden Streamlit button."""
+def countdown_timer(remaining_seconds, label, btn_text):
+    """Show JS countdown. When it hits 0, click the existing button by its text."""
     st.markdown(f'<div id="timer-display">⏱ {label}: <strong id="timer-val"></strong></div>', unsafe_allow_html=True)
-    # Hidden button that JS will click when time is up
-    clicked = st.button("__auto__", key=auto_trigger_key)
-    st.markdown("""
-<style>
-button[kind="secondary"][data-testid="baseButton-secondary"] { display: none !important; }
-</style>
-""", unsafe_allow_html=True)
     st.components.v1.html(f"""
 <script>
 var remaining = {int(remaining_seconds)};
+var btnText = {repr(btn_text)};
 function fmt(s) {{
     var m = Math.floor(s / 60);
     var sec = s % 60;
@@ -67,7 +61,7 @@ function tick() {{
     if (remaining <= 0) {{
         var buttons = window.parent.document.querySelectorAll("button");
         for (var i = 0; i < buttons.length; i++) {{
-            if (buttons[i].innerText.trim() === "__auto__") {{
+            if (buttons[i].innerText.trim() === btnText) {{
                 buttons[i].click();
                 return;
             }}
@@ -79,7 +73,6 @@ function tick() {{
 tick();
 </script>
 """, height=0)
-    return clicked
 
 def save_to_excel(data):
     exp_code = data.get("exp_code", "unknown")
@@ -242,12 +235,10 @@ List as many **unusual, novel, and reasonable non-conventional uses** as you can
         key=f"response_{idx}"
     )
 
-    auto_clicked = countdown_timer(remaining, "Time remaining", f"auto_task_{idx}")
+    countdown_timer(remaining, "Time remaining", "Submit & Continue")
 
     st.markdown("")
-    manual_clicked = st.button("Submit & Continue", type="primary", key=f"manual_task_{idx}")
-
-    if auto_clicked or manual_clicked:
+    if st.button("Submit & Continue", type="primary", key=f"manual_task_{idx}"):
         st.session_state.data[task["key"]] = st.session_state.get(f"response_{idx}", "")
         st.session_state.stage = "break" if idx < 2 else "final_q"
         st.rerun()
@@ -273,12 +264,10 @@ elif st.session_state.stage == "break":
         st.markdown(f"**Next object: {task_names[idx + 1]}**")
     st.markdown("")
 
-    auto_clicked = countdown_timer(remaining, "Next task starts in", f"auto_break_{idx}")
+    countdown_timer(remaining, "Next task starts in", f"I'm Ready — Start Task {idx + 2}")
 
     st.markdown("")
-    manual_clicked = st.button(f"I'm Ready — Start Task {idx + 2}", type="primary", key=f"manual_break_{idx}")
-
-    if auto_clicked or manual_clicked:
+    if st.button(f"I'm Ready — Start Task {idx + 2}", type="primary", key=f"manual_break_{idx}"):
         st.session_state.task_index += 1
         st.session_state.stage = "task"
         st.rerun()
