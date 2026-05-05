@@ -17,12 +17,12 @@ class EmailSender:
     def send_email(self, receiver_email, subject, content, attachments=None):
         try:
             message = MIMEMultipart()
-            message['From'] = Header(self.sender_email, 'utf-8')
+            message['From'] = self.sender_email
 
             if isinstance(receiver_email, list):
-                message['To'] = Header(','.join(receiver_email), 'utf-8')
+                message['To'] = ','.join(receiver_email)
             else:
-                message['To'] = Header(receiver_email, 'utf-8')
+                message['To'] = receiver_email
                 receiver_email = [receiver_email]
 
             message['Subject'] = Header(subject, 'utf-8')
