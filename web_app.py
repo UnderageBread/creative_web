@@ -183,6 +183,12 @@ elif st.session_state.stage == "task":
     elapsed = time.time() - st.session_state[task_key]
     TASK_DURATION = 180
 
+    if elapsed >= TASK_DURATION:
+        st.session_state.data[task["key"]] = st.session_state.get(f"response_{idx}", "")
+        st.session_state.stage = "break" if idx < 2 else "final_q"
+        st.rerun()
+        st.stop()
+
     st.title(f"Task {idx + 1} of 3: {task['name']}")
     st.markdown("---")
 
@@ -209,21 +215,18 @@ List as many **unusual, novel, and reasonable non-conventional uses** as you can
         key=f"response_{idx}"
     )
 
-    if elapsed >= TASK_DURATION:
+    remaining = int(TASK_DURATION - elapsed)
+    mins, secs = divmod(remaining, 60)
+    st.markdown(f"⏱ Time remaining: **{mins}:{secs:02d}**")
+    st.markdown("")
+    if st.button("Submit & Continue", type="primary"):
         st.session_state.data[task["key"]] = st.session_state.get(f"response_{idx}", "")
         st.session_state.stage = "break" if idx < 2 else "final_q"
         st.rerun()
-    else:
-        remaining = int(TASK_DURATION - elapsed)
-        mins, secs = divmod(remaining, 60)
-        st.markdown(f"⏱ Time remaining: **{mins}:{secs:02d}**")
-        st.markdown("")
-        if st.button("Submit & Continue", type="primary"):
-            st.session_state.data[task["key"]] = st.session_state.get(f"response_{idx}", "")
-            st.session_state.stage = "break" if idx < 2 else "final_q"
-            st.rerun()
-        time.sleep(1)
-        st.rerun()
+        st.stop()
+    time.sleep(1)
+    st.rerun()
+    st.stop()
 
 # ── Stage 5: Break ────────────────────────────────────────────────────────────
 elif st.session_state.stage == "break":
@@ -236,8 +239,14 @@ elif st.session_state.stage == "break":
         st.session_state.break_idx = idx
 
     elapsed = time.time() - st.session_state.break_start
-    remaining = int(BREAK_DURATION - elapsed)
 
+    if elapsed >= BREAK_DURATION:
+        st.session_state.task_index += 1
+        st.session_state.stage = "task"
+        st.rerun()
+        st.stop()
+
+    remaining = int(BREAK_DURATION - elapsed)
     st.title("Rest Break")
     st.markdown("---")
     st.markdown(f"### Task {idx + 1} complete! Great work. 🎉")
@@ -246,19 +255,15 @@ elif st.session_state.stage == "break":
     if idx + 1 < len(task_names):
         st.markdown(f"**Next object: {task_names[idx + 1]}**")
     st.markdown("")
-
-    if elapsed >= BREAK_DURATION:
+    st.markdown(f"⏱ Next task starts in **{remaining}** seconds...")
+    if st.button(f"I'm Ready — Start Task {idx + 2}", type="primary"):
         st.session_state.task_index += 1
         st.session_state.stage = "task"
         st.rerun()
-    else:
-        st.markdown(f"⏱ Next task starts in **{remaining}** seconds...")
-        if st.button(f"I'm Ready — Start Task {idx + 2}", type="primary"):
-            st.session_state.task_index += 1
-            st.session_state.stage = "task"
-            st.rerun()
-        time.sleep(1)
-        st.rerun()
+        st.stop()
+    time.sleep(1)
+    st.rerun()
+    st.stop()
 
 # ── Stage 6: Final Question ───────────────────────────────────────────────────
 elif st.session_state.stage == "final_q":
